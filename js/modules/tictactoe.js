@@ -39,6 +39,14 @@ class Board extends HTMLElement{
     }
   }
 
+  get firstMove(){
+    return generate_attribute_template(this, "firstMove", "true")
+  }
+
+  set firstMove(val){
+    this.setAttribute("firstMove", val)
+  }
+
   get emptySquares(){
     return this.querySelectorAll("[state='empty']")
   }
@@ -53,6 +61,10 @@ class Board extends HTMLElement{
 
   get tiles(){
     return this.querySelectorAll('ttc-tile')
+  }
+
+  get full(){
+    return true ? this.querySelector("[state='empty']") == undefined : false
   }
 
   tileByIndex(index){
@@ -198,10 +210,87 @@ class Board extends HTMLElement{
 }
 
 class AIPlayer{
+ 
+  static evaluate(board){
+    // replace this with my function not stolen one
+    const winningCombinations = [
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6]
+    ];
+
+    for (let i = 0; i < winningCombinations.length; i++) {
+      const [a, b, c] = winningCombinations[i];
+      if (board.tileByIndex(a).type && board.tileByIndex(a).type === board.tileByIndex(b).type && board.tileByIndex(b).type === board.tileByIndex(c).type) {
+        if (board.tileByIndex(a).type === 'circle') {
+          return -10;
+        } else if (board.tileByIndex(a).type === 'cross') {
+          return 10;
+        }
+      }
+    }
+    return 0;
+  }
+  
+
+  static minmax(board, depth, humanMove, firstMove){
+    const score = this.evaluate(board);
+   
+    if(depth === 5 && firstMove){
+      return score-depth // Band aid not so working solution to a problem where the first move is laggy
+    }
+
+    if(score === 10 || score === -10 || board.full === true){
+      return score-depth;
+    }
+
+    if(humanMove){
+      let bestScore = -Infinity;
+
+      board.emptySquares.forEach((potentialMove)=>{      
+        potentialMove.tryMark(board.game.aiPlayer);
+        bestScore = Math.max(bestScore, this.minmax(board, depth+1, false, firstMove));
+        potentialMove.reverseMark();
+      })
+
+      return bestScore
+    }
+    else{
+      let bestScore = Infinity;
+
+
+      board.emptySquares.forEach((potentialMove)=>{
+        potentialMove.tryMark(board.game.humanPlayer);
+        bestScore = Math.min(bestScore, this.minmax(board, depth+1, true, firstMove))
+        potentialMove.reverseMark();
+      })
+
+      return bestScore
+    }
+  }
+
   static calculateMove(board){
-    let emptySquares = board.emptySquares;
-    let chosenSquare = emptySquares[Math.floor(Math.random() * emptySquares.length)];
-    chosenSquare.mark(board.game.aiPlayer);
+    let bestScore = -Infinity;
+    let bestMove;
+
+    board.emptySquares.forEach((potentialMove)=>{
+      potentialMove.tryMark(board.game.aiPlayer) 
+      let score = this.minmax(board, 0, false, board.firstMove);
+      potentialMove.reverseMark()
+
+      if(score > bestScore){
+        bestScore = score;
+        bestMove = potentialMove;
+      }
+    })
+
+
+    bestMove.mark(board.game.aiPlayer);
   }
 }
 
@@ -321,6 +410,16 @@ class Tile extends HTMLElement{
     this.setAttribute("type", val)
   }
 
+  tryMark(type){
+    this.state = "solid";
+    this.type = type;
+  }
+
+  reverseMark(){
+    this.type= "blank";
+    this.state = "empty";
+  }
+
   mark(type){
     if(this.state == "solid"){
       return false;
@@ -334,6 +433,7 @@ class Tile extends HTMLElement{
     }
     this.state = "solid";
     this.type = type;
+    this.board.firstMove = false;
     this.board.finishedMove();
   }
 
